@@ -404,7 +404,6 @@ String difyAi(String json_string)
       const char *data = doc["answer"];
       Serial.println(data);
       response = String(data);
-      std::replace(response.begin(), response.end(), '\n', ' ');
     }
   }
   else
@@ -1436,6 +1435,52 @@ void SST_ChatGPT()
   }
 }
 
+void say(String &str)
+{
+  String sentence;
+  String opt_str;
+
+  String tts_param = "&speaker=";
+  int voice = 3;
+
+  int opt_begin, opt_end;
+  int sentence_end;
+
+  speech_text_buffer = str;
+
+  opt_begin = speech_text_buffer.indexOf('#');
+
+  if (opt_begin >= 0)
+  {
+    opt_end = speech_text_buffer.indexOf('\n', opt_begin + 1);
+    sentence_end = speech_text_buffer.indexOf('#', opt_end + 1);
+    opt_str = speech_text_buffer.substring(opt_begin, opt_end);
+    sscanf(opt_str.c_str(), "#speaker=%d", &voice);
+  }
+  else
+  {
+    sentence_end = -1;
+    opt_end = -1;
+  }
+
+  if (sentence_end > 0)
+  {
+    sentence = speech_text_buffer.substring(opt_end + 1, sentence_end);
+    speech_text_buffer = speech_text_buffer.substring(sentence_end);
+  }
+  else
+  {
+    sentence = speech_text_buffer.substring(opt_end + 1);
+    speech_text_buffer = "";
+  }
+
+  Serial.printf("Speaker = %d Sentence = %s\n", voice, sentence.c_str());
+  Serial.printf("Next = %s\n", speech_text_buffer.c_str());
+
+  tts_param += voice;
+  Voicevox_tts((char *)sentence.c_str(), (char *)tts_param.c_str());
+}
+
 void loop()
 {
   static int lastms = 0;
@@ -1537,12 +1582,11 @@ void loop()
   if (speech_text != "")
   {
     avatar.setExpression(Expression::Happy);
-    speech_text_buffer = speech_text;
-    speech_text = "";
     M5.Mic.end();
     M5.Speaker.begin();
     mode = 0;
-    Voicevox_tts((char *)speech_text_buffer.c_str(), (char *)TTS_PARMS.c_str());
+    say(speech_text);
+    speech_text = "";
   }
 
   if (mp3->isRunning())
@@ -1557,14 +1601,21 @@ void loop()
       }
       Serial.println("mp3 stop");
       avatar.setExpression(Expression::Neutral);
-      speech_text_buffer = "";
       delay(200);
-      M5.Speaker.end();
-      M5.Mic.begin();
-      if (wakeword_is_enable)
-        mode = 1;
+      if (speech_text_buffer != "")
+      {
+        avatar.setExpression(Expression::Happy);
+        say(speech_text_buffer);
+      }
       else
-        mode = 0;
+      {
+        M5.Speaker.end();
+        M5.Mic.begin();
+        if (wakeword_is_enable)
+          mode = 1;
+        else
+          mode = 0;
+      }
     }
     delay(1);
   }
